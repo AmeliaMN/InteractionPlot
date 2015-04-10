@@ -3,7 +3,16 @@ library(shiny)
 shinyUI(fluidPage(
 
   # Application title
-  titlePanel("California education data"),
+  
+  wellPanel(h1("California education data"),
+              p("(A caveat-- this is bad statistical practice. However, it is something that I see people doing pretty frequently, 
+              and hopefully this interactive example will demonstrate how unstable it can be. Using categorical terms in a linear regression 
+              is a way to compare predictive values for separate groups. Using several categorical variables can create easy-to-interpet interaction plots, 
+              unlike the more complex interaction plots that result from other combinations of variable types. Because of this, users will sometimes take a 
+              continous numeric variable and split it into two or more categorical groups. However, the choice of cut point is very important to the results-- 
+              just a slight change in that cut point, and the effect may appear much smaller, and can even 'flip' if the variables are colinear. 
+              However, since most users are working in a very static environment, there is almost no chance they will try more than one value for cut point. 
+              This is a simple example of how having access to all the parameter choices made in an analysis could lead to better analysis.)")),
 
   # Sidebar with a slider input for number of bins
   sidebarLayout(
