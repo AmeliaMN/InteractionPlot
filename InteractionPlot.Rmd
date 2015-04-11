@@ -1,0 +1,133 @@
+---
+title: "Interaction plot"
+author: "Amelia McNamara"
+date: "April 11, 2015"
+output: html_document
+runtime: shiny
+---
+
+I've now done two versions of this app-- one that stands alone without any explanation (and makes it easier to see all the effects of your cut point choice) and this one, with a little more exposition. [stand-alone app](https://ameliamn.shinyapps.io/InteractionPlot)
+
+A caveat-- this is bad statistical practice. However, it is something that I see people doing pretty frequently, and hopefully this interactive example will demonstrate how unstable it can be. 
+
+Using categorical terms in a linear regression is a way to compare predictive values for separate groups. Using several categorical variables can create easy-to-interpet interaction plots, unlike the more complex interaction plots that result from other combinations of variable types. 
+
+Because of this, users will sometimes take a continous numeric variable and split it into two or more categorical groups. However, the choice of cut point is very important to the results-- just a slight change in that cut point, and the effect may appear much smaller, and can even 'flip' if the variables are colinear. 
+
+However, since most users are working in a very static environment, there is almost no chance they will try more than one value for cut point. This is a simple example of how having access to all the parameter choices made in an analysis could lead to better analysis.
+
+
+## Building a linear model
+
+In this example, we're going to be working with 2013 data on the Academic Performance Index (API) from the state of California. [Record layout](http://www.cde.ca.gov/ta/ac/ap/reclayout13g.asp)
+
+In the model, we're going to try to predict API based on other factors from within the data set. The variable that will be used in every model is SD_SIG, which is a categorical variable indicating whether a significant number of students are considered to be socioecononomically disadvangtaged. The variable is coded YES if a significant number of students at the school are, and NO if not.
+
+We're going to combine this with one other variable of your choosing, and then look at the interaction between your chosen variable, SD_SIG, and API (our response variable).
+
+```{r, echo=FALSE}
+d1 <- read.csv("InteractionPlot/2013apidata.csv")
+d1 <- d1[d1$RTYPE=="S",]
+d1$cut1 <- rep(NA, times=length(d1$AVG_ED))
+```
+
+Choose your variable of interest:
+```{r, echo=FALSE}
+ selectInput("variable",
+             "Additional variable for model:", 
+             choices = list("Percent black"="PCT_AA", 
+                            "Average parent education"="AVG_ED", 
+                            "Percent English learners"="P_EL", 
+                            "Percent teachers with full credentials"="FULL"),
+             selected = "PCT_AA")
+```
+The default is percent of students designated as black or African American at a school, and it works pretty well for this explanation. But feel free to choose other variables as well.
+
+Then, because we want to be able to see a simple categorical-categorical interaction plot, we're going to convert this continuous numeric variable into a categorical variable with two possible labels-- "Above" means above a particular cut point, and "Below" is below that same cut point. Again, this is where the practice gets a bit sketchy. 
+```{r, echo=FALSE}
+cutInput <- reactive ({
+    d1$cut1[d1[,input$variable]>=input$cutpoint] <- "Above"
+    d1$cut1[d1[,input$variable]<input$cutpoint] <- "Below"
+    d1$cut1 <- factor(d1$cut1)
+    return(d1)
+  })
+
+fluidRow(
+ column(width=6, 
+        renderUI ({
+   sliderInput("cutpoint", 
+               "Cut point selection",
+               min = range(d1[,input$variable], na.rm=TRUE)[1],
+               max = range(d1[,input$variable], na.rm=TRUE)[2],
+               value = mean(d1[,input$variable], na.rm=TRUE))
+  })),
+ column(width=6,
+  renderPlot({
+    hist(d1[,input$variable], main= "",xlab="", ylab="")
+    abline(v = input$cutpoint, col="red")
+  }, width=500)))
+fluidRow(
+  column(width=6, offset=6, 
+      renderText({
+    paste0(round(sum(cutInput()$cut1=="Below", na.rm=TRUE)/length(cutInput()$cut1)*100), 
+           "% of the data falls below and ", round(sum(cutInput()$cut1=="Above",
+                                                  na.rm=TRUE)/length(cutInput()$cut1)*100),
+           "% above the cut point.")
+  })
+))
+  
+```
+
+```{r, echo=FALSE}
+  modelInput <- reactive ({
+    m1 <- lm(API13 ~ cut1+SD_SIG+cut1*SD_SIG, data=cutInput(), na.action='na.omit')
+  })
+  
+  compare1 <- reactive ({
+    ifelse(coef(modelInput())[[2]]>0,  "more", "less")
+  })
+  compare2 <- reactive ({
+    ifelse(coef(modelInput())[[3]]>0,  "more", "less")
+  })
+  compare3 <- reactive ({
+    ifelse(coef(modelInput())[[4]]>0,  "increased", "reduced")
+  })
+  compare4 <- reactive ({
+    ifelse((coef(modelInput())[[3]]+coef(modelInput())[[4]])>0, "increase", "decrease")
+  })
+  
+```
+
+Now is where it gets interesting-- we run the model, and can look at the coefficients, and observe how they change as we move the cut point. And perhaps more interestingly, we can see a graphic representation of the interaction effect and view how the change in cut point effects this. 
+```{r, echo=FALSE}
+  splitLayout(renderTable({
+    summary(modelInput())
+  }),
+
+renderPlot({
+    interaction.plot(cutInput()$cut1, cutInput()$SD_SIG, cutInput()$API13, 
+                     xlab=paste(input$variable, "above and below cutpoint of", 
+                                input$cutpoint), ylab="Mean of API score",
+                     trace.label="Significant number of \n disadvantaged students", 
+                     ylim=c(600, 950))
+  })
+)
+```
+
+Finally, you can think about the coefficient interpretation: 
+```{r, echo=FALSE}
+renderText({
+    paste0("Everything else held equal, schools whose ", input$variable, " is below ", 
+           input$cutpoint, " score on average ", round(abs(coef(modelInput())[[2]])), 
+           " points ", compare1(),  " on API, compared to schools where ", input$variable, 
+           " is above ", input$cutpoint, 
+           ". Everything else held equal, schools that have a significant number of socioeconomically disadvatanged students have API scores on average ",  
+           round(abs(coef(modelInput())[[3]])), " points ", compare2(), 
+           " compared to schools without a signficant number of socioeconomically disadvanted students. \n However, the effect of ", 
+           input$variable, " on API score is not the same for schools that have a significant number of disadvantaged students and those who do not. For schools that have a significant number of scoioeconimically disadvantaged students, the effect of ",
+           input$variable ," is ", compare3(), " by ", round(abs(coef(modelInput())[[4]])), " points. In other words, for schools classified as having a significant number of disadvantaged students, API score for schools with below ",
+           input$cutpoint, " ", input$variable, " would ", compare4(), " on average ", 
+           round(abs(coef(modelInput())[[3]]+coef(modelInput())[[4]])) , " points.")
+  })
+
+```

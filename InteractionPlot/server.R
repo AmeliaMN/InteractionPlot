@@ -11,6 +11,16 @@ shinyServer(function(input, output) {
     return(d1)
   })
   
+  output$underlyingdist <- renderPlot({
+    hist(d1[,input$variable], main= "",xlab="", ylab="")
+    abline(v = input$cutpoint, col="red")
+  })
+  
+  output$percens <- renderText({
+    paste0(round(sum(cutInput()$cut1=="Below", na.rm=TRUE)/length(cutInput()$cut1)*100), "% of the data falls below and ",
+    round(sum(cutInput()$cut1=="Above", na.rm=TRUE)/length(cutInput()$cut1)*100), "% above the cut point.")
+  })
+  
   modelInput <- reactive ({
     m1 <- lm(API13 ~ cut1+SD_SIG+cut1*SD_SIG, data=cutInput(), na.action='na.omit')
   })
